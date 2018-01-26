@@ -1,0 +1,20 @@
+<resources>
+    <string name="app_name">CustomNotification</string>
+    <string name="show_notification">Show notification</string>
+    <string name="use_big_picture_style">Use big picture style</string>
+    <string name="use_remote_views">Use RemoteViews</string>
+    <string name="big_picture_style_demo">Big picture style demonstration</string>
+    <string name="custom_notification_demo">Custom notification demonstration</string>
+    <string name="total_buttons">Total action buttons</string>
+    <string name="total_photos">Total photos</string>
+    <string name="photos_per_row">Number of photos per row</string>
+    <string name="compact_mode">Compact mode</string>
+    <string name="number">Number</string>
+    <string name="landscape">Landscape photos</string>
+    <string name="photo_clicked">Photo #%1$s clicked.</string>
+    <string name="ok" translatable="false">OK</string>
+    <plurals name="more_photos">
+        <item quantity="one">1 more photo</item>
+        <item quantity="other">%d more photos</item>
+    </plurals>
+</resources>
