@@ -207,7 +207,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         for (int i = 0; i < totalPhotos; i += photoPerRow) {
             RemoteViews rowView = new RemoteViews(getPackageName(), R.layout.horizontal_linear_layout);
 
-            // TODO: 1/25/18 fix portrait images not showing
             // check if it has reached the last row
             int residualSpace = (int) (maxGridHeight - curHeight);
             if (residualSpace < rowHeight) {
