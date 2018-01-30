@@ -25,6 +25,12 @@
             android:checked="true"
             android:text="@string/use_remote_views"/>
 
+        <RadioButton
+            android:id="@+id/rb_grid_layout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/use_grid_layout"/>
+
     </RadioGroup>
 
     <ScrollView

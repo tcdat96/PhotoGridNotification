@@ -2,8 +2,6 @@ package com.example.cpu10661.customnotification;
 
 import android.animation.LayoutTransition;
 import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
-import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -20,8 +18,10 @@ import android.support.v4.app.NotificationCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
+import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 import android.widget.Switch;
@@ -36,19 +36,23 @@ import java.util.concurrent.ExecutionException;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
+    private static final String TAG = MainActivity.class.getSimpleName();
+
     private static final String CHANNEL_ID = "CHANNEL_01";
     private static final int NOTIFICATION_ID = 1;
 
     private static final int TYPE_BIG_PICTURE_STYLE = 0;
     private static final int TYPE_REMOTE_VIEWS = 1;
+    private static final int TYPE_GRID_LAYOUT = 2;
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef({TYPE_BIG_PICTURE_STYLE, TYPE_REMOTE_VIEWS})
+    @IntDef({TYPE_BIG_PICTURE_STYLE, TYPE_REMOTE_VIEWS, TYPE_GRID_LAYOUT})
     private @interface NOTIFICATION_TYPE{}
     @NOTIFICATION_TYPE
     private int mNotificationType = TYPE_REMOTE_VIEWS;
 
     private Switch mCompactModeSwitch, mLandscapeSwitch;
     private AdjustNumberView mTotalButtonsANV, mTotalPhotosANV, mPhotosPerRowANV;
+    private GridLayout mGridLayout;         // only used in GridLayout option
 
     private NotificationManager mNotificationManager;
     private int mMaxGridHeight;
@@ -78,6 +82,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         findViewById(R.id.btn_show_notifications).setOnClickListener(this);
         findViewById(R.id.rb_big_picture_style).setOnClickListener(this);
         findViewById(R.id.rb_remote_views).setOnClickListener(this);
+        findViewById(R.id.rb_grid_layout).setOnClickListener(this);
 
         mTotalButtonsANV = findViewById(R.id.anv_total_buttons);
         mTotalPhotosANV = findViewById(R.id.anv_total_photos);
@@ -189,6 +194,36 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
+    private void showNotificationGridLayout() {
+        final NotificationCompat.Builder builder = getNotificationBuilder();
+
+        // get cell IDs
+        int[] viewIds = new int[mGridLayout.getChildCount()];
+        for (int i = 0; i < mGridLayout.getChildCount(); i++) {
+            viewIds[i] = mGridLayout.getChildAt(i).getId();
+        }
+
+        // add photos to grid
+        RemoteViews bigContentView = new RemoteViews(getPackageName(), R.layout.grid_layout);
+        int totalPhotos = 3;
+        for (int i = 0; i < totalPhotos; i += 2) {
+            for (int j = 0; j < 2 && i + j < totalPhotos; j++) {
+                RemoteViews photoView = new RemoteViews(getPackageName(), R.layout.grid_item);
+                photoView.setImageViewBitmap(R.id.iv_photo, mPhotoItem);
+                bigContentView.addView(viewIds[i + j], photoView);
+            }
+        }
+
+        // add grid to notification
+        builder.setContentTitle(getString(R.string.custom_notification_demo))
+                .setStyle(new NotificationCompat.DecoratedCustomViewStyle())
+                .setCustomBigContentView(bigContentView);
+
+        if (mNotificationManager != null) {
+            mNotificationManager.notify(NOTIFICATION_ID, builder.build());
+        }
+    }
+
     private RemoteViews getPhotosGridView(int photoPerRow, int totalPhotos) {
 
         // recalculate grid's height if it has action buttons
@@ -284,33 +319,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onClick(View view) {
-        HandlerThread handlerThread = new HandlerThread(getPackageName());
-        handlerThread.start();
-        Handler handler = new Handler(handlerThread.getLooper());
         switch (view.getId()) {
             case R.id.btn_show_notifications:
-                switch (mNotificationType) {
-                    case TYPE_BIG_PICTURE_STYLE:
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                retrievePhotoItemSync(mPhotosPerRowANV.getNumberValue());
-                                showNotificationBigPictureStyle();
-                            }
-                        });
-                        break;
-                    case TYPE_REMOTE_VIEWS:
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                retrievePhotoItemSync(mPhotosPerRowANV.getNumberValue());
-                                showNotificationRemoteViews();
-                            }
-                        });
-                        break;
-                    default:
-                        throw new UnsupportedOperationException("Unknown notification type");
-                }
+                showNotification();
                 break;
             case R.id.rb_big_picture_style:
                 mNotificationType = TYPE_BIG_PICTURE_STYLE;
@@ -320,6 +331,51 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 mNotificationType = TYPE_REMOTE_VIEWS;
                 setRemoteViewsOptionsEnabled(true);
                 break;
+            case R.id.rb_grid_layout:
+                mNotificationType = TYPE_GRID_LAYOUT;
+                Log.d(TAG, "onClick: ");
+                setRemoteViewsOptionsEnabled(false);
+                break;
+        }
+    }
+
+    private void showNotification() {
+        HandlerThread handlerThread = new HandlerThread(getPackageName());
+        handlerThread.start();
+        Handler handler = new Handler(handlerThread.getLooper());
+
+        switch (mNotificationType) {
+            case TYPE_BIG_PICTURE_STYLE:
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        retrievePhotoItemSync(1);
+                        showNotificationBigPictureStyle();
+                    }
+                });
+                break;
+            case TYPE_REMOTE_VIEWS:
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        retrievePhotoItemSync(mPhotosPerRowANV.getNumberValue());
+                        showNotificationRemoteViews();
+                    }
+                });
+                break;
+            case TYPE_GRID_LAYOUT:
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        mGridLayout = (GridLayout) View.inflate(
+                                MainActivity.this, R.layout.grid_layout, null);
+                        retrievePhotoItemSync(mGridLayout.getColumnCount());
+                        showNotificationGridLayout();
+                    }
+                });
+                break;
+            default:
+                throw new UnsupportedOperationException("Unknown notification type");
         }
     }
 

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GridLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:columnCount="2"
+    android:rowCount="2">
+
+    <FrameLayout android:id="@+id/fl_1_1" />
+    <FrameLayout android:id="@+id/fl_1_2" />
+
+    <FrameLayout android:id="@+id/fl_2_1"
+        android:layout_marginTop="4dp"/>
+    <FrameLayout android:id="@+id/fl_2_2"
+        android:layout_marginTop="4dp" />
+
+</GridLayout>

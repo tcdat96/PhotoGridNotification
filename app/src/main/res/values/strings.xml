@@ -13,6 +13,7 @@
     <string name="landscape">Landscape photos</string>
     <string name="photo_clicked">Photo #%1$s clicked.</string>
     <string name="ok" translatable="false">OK</string>
+    <string name="use_grid_layout">Use GridLayout</string>
     <plurals name="more_photos">
         <item quantity="one">1 more photo</item>
         <item quantity="other">%d more photos</item>

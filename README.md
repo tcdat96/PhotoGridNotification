@@ -24,7 +24,14 @@ Since it is RemoteViews, each view can be tied with an onClick event as long as 
 
 Keep in mind that in some circumstances, you will have to thoughtfully think about how you layout your view to perfectly suit the notification space.
 
+3. [GridLayout](https://developer.android.com/reference/android/widget/GridLayout.html): this approach, in fact, still uses the RemoteViews like the previous method, but it has significantly simplified the creating photo grid process (reducing convoluted calculations). The primary drawback is the fact that the layout is hardcoded, in other words you cannot change the number of photos per row programmatically.
+
+In order for this approach to work, the GridLayout must be the original widget comes with official SDK, not the v7 library version. 
+
 # Additional info
 * The maximum number of action buttons is 3 per notification.
 * The maximum height of expanded notification is 256dp.
 * The height of action buttons is the same as the actionBarSize.
+* Keep in mind that the notification content is **unscrollable**, so exceeding the maximum height will result in some views being cut off.
+* Last but not least, notification cannot contain collection elements, such as ListView, GridView, StackView and so on (due to [this reason](https://stackoverflow.com/a/42504612/8707464))
+
