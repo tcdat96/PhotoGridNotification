@@ -1,45 +1,39 @@
 package com.example.cpu10661.customnotification;
 
 import android.animation.LayoutTransition;
-import android.annotation.SuppressLint;
 import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.os.Build;
+import android.media.ThumbnailUtils;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.support.annotation.IdRes;
 import android.support.annotation.IntDef;
+import android.support.annotation.NonNull;
 import android.support.v4.app.NotificationCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.util.TypedValue;
 import android.view.View;
 import android.widget.GridLayout;
 import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 import android.widget.Switch;
 
-import com.bumptech.glide.Glide;
+import com.example.cpu10661.customnotification.Utils.BitmapUtils;
+import com.example.cpu10661.customnotification.Utils.NotificationUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.concurrent.ExecutionException;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener {
 
-    private static final String TAG = MainActivity.class.getSimpleName();
-
-    private static final String CHANNEL_ID = "CHANNEL_01";
-    private static final int NOTIFICATION_ID = 1;
+    private static final Uri.Builder BASE_URI_BUILDER =
+            Uri.parse("https://source.unsplash.com/random/?").buildUpon();
 
     private static final int TYPE_BIG_PICTURE_STYLE = 0;
     private static final int TYPE_REMOTE_VIEWS = 1;
@@ -50,32 +44,27 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @NOTIFICATION_TYPE
     private int mNotificationType = TYPE_REMOTE_VIEWS;
 
-    private Switch mCompactModeSwitch, mLandscapeSwitch;
+    private Switch mAsyncSwitch;
     private AdjustNumberView mTotalButtonsANV, mTotalPhotosANV, mPhotosPerRowANV;
     private GridLayout mGridLayout;         // only used in GridLayout option
 
-    private NotificationManager mNotificationManager;
-    private int mMaxGridHeight;
-    private Bitmap mPhotoItem;
+    private Handler mHandler;
+    private NotificationCompat.Builder mBuilder;
+    private Bitmap mPlaceHolder;
+    private int mPhotoSize;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        initializeNotificationComponents();
+        NotificationUtils.initializeNotificationComponents(this);
 
         initializeUiComponents();
-    }
 
-    private void initializeNotificationComponents() {
-        mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            CharSequence name = "channel_01";
-            int importance = NotificationManager.IMPORTANCE_HIGH;
-            NotificationChannel mChannel = new NotificationChannel(CHANNEL_ID, name, importance);
-            mNotificationManager.createNotificationChannel(mChannel);
-        }
+        HandlerThread handlerThread = new HandlerThread(getPackageName());
+        handlerThread.start();
+        mHandler = new Handler(handlerThread.getLooper());
     }
 
     private void initializeUiComponents() {
@@ -88,114 +77,55 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         mTotalPhotosANV = findViewById(R.id.anv_total_photos);
         mPhotosPerRowANV = findViewById(R.id.anv_photos_per_row);
 
-        mCompactModeSwitch = findViewById(R.id.sw_compact_mode);
-        mLandscapeSwitch = findViewById(R.id.sw_landscape);
+        mAsyncSwitch = findViewById(R.id.sw_load_async);
 
         LinearLayout optionsLinearLayout = findViewById(R.id.ll_options);
         optionsLinearLayout.setLayoutTransition(new LayoutTransition());
     }
 
-    /**
-     * calculate bitmap's width and height in order to perfectly fit them into each row
-     * of GridView layout
-     * this method is synchronously executed, hence comes the "Sync" suffix
-     *
-     * @param itemsPerRow number of items (photos) per row
-     */
-    private void retrievePhotoItemSync(int itemsPerRow) {
+    private void computePhotoSize(int itemsPerRow) {
         // get screen width
         DisplayMetrics displayMetrics = new DisplayMetrics();
         getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
-        float width = displayMetrics.widthPixels;
+        float screenWidth = displayMetrics.widthPixels;
 
         // get padding
         float outerPadding = Utils.dpToPx(this, 16) * 2;
         float gridSpace = getResources().getDimension(R.dimen.grid_item_space);
         float padding = outerPadding + gridSpace * (itemsPerRow - 1);
 
-        int imgRes = mLandscapeSwitch.isChecked() ?
-                R.drawable.grid_photo_item_land :
-                R.drawable.grid_photo_item_port;
-        // get image width and height
-        BitmapFactory.Options dimensions = new BitmapFactory.Options();
-        dimensions.inJustDecodeBounds = true;
-        BitmapFactory.decodeResource(getResources(), imgRes, dimensions);
+//        int imgRes = mLandscapeSwitch.isChecked() ?
+//                R.drawable.grid_photo_item_land :
+//                R.drawable.grid_photo_item_port;
+//        // get image width and height
+//        BitmapFactory.Options dimensions = new BitmapFactory.Options();
+//        dimensions.inJustDecodeBounds = true;
+//        BitmapFactory.decodeResource(getResources(), imgRes, dimensions);
 
-        // retrieve photo with calculated size
-        int photoWidth = (int) ((width - padding) / itemsPerRow);
-        int photoHeight = photoWidth * dimensions.outHeight / dimensions.outWidth;
-        try {
-            mPhotoItem = Glide.with(this).asBitmap().load(imgRes)
-                    .submit(photoWidth, photoHeight)
-                    .get();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        } catch (ExecutionException e) {
-            e.printStackTrace();
-        }
-
-        // calculate maximum grid view height
-        float titleHeight = Utils.dpToPx(this, 16);
-        mMaxGridHeight = (int) (Utils.dpToPx(this, 256) - (outerPadding + titleHeight));
-    }
-
-    private NotificationCompat.Builder getNotificationBuilder() {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_notifications_black_24dp)
-                .setContentIntent(getNotificationActionPendingIntent())
-                .setAutoCancel(true);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            builder.setPriority(Notification.PRIORITY_HIGH)
-                    .setDefaults(Notification.DEFAULT_ALL);
-        }
-
-        int totalButtons = mTotalButtonsANV.getNumberValue();
-        for (int i = 0; i < totalButtons; i++) {
-            String text = "button " + i;
-            builder.addAction(new NotificationCompat.Action(
-                    R.drawable.ic_notifications_black_24dp, text, null));
-        }
-
-        return builder;
-    }
-
-    private PendingIntent getNotificationActionPendingIntent() {
-        Intent resultIntent = new Intent(this, MainActivity.class);
-        return PendingIntent.getActivity(this, 0,
-                resultIntent, PendingIntent.FLAG_UPDATE_CURRENT);
+        // calc photo new size
+        mPhotoSize = (int) ((screenWidth - padding) / itemsPerRow);
+        getPlaceHolder();
     }
 
     private void showNotificationBigPictureStyle() {
 
-        final NotificationCompat.Builder builder = getNotificationBuilder();
-        builder.setContentTitle(getString(R.string.big_picture_style_demo));
+        mBuilder = NotificationUtils.getNotificationBuilder(this, mTotalButtonsANV.getValue());
+        mBuilder.setContentTitle(getString(R.string.big_picture_style_demo));
 
         final NotificationCompat.BigPictureStyle style = new NotificationCompat.BigPictureStyle();
-        style.bigPicture(mPhotoItem);
-        builder.setStyle(style);
-
-        if (mNotificationManager != null) {
-            mNotificationManager.notify(NOTIFICATION_ID, builder.build());
-        }
-    }
-
-    private void showNotificationRemoteViews() {
-        final NotificationCompat.Builder builder = getNotificationBuilder();
-
-        RemoteViews bigContentView = getPhotosGridView(mPhotosPerRowANV.getNumberValue(),
-                mTotalPhotosANV.getNumberValue());
-        builder.setContentTitle(getString(R.string.custom_notification_demo))
-                .setStyle(new NotificationCompat.DecoratedCustomViewStyle())
-                .setCustomBigContentView(bigContentView);
-
-        if (mNotificationManager != null) {
-            mNotificationManager.notify(NOTIFICATION_ID, builder.build());
-        }
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                Bitmap bitmap = getDemoBitmap(true);
+                style.bigPicture(bitmap);
+                mBuilder.setStyle(style);
+                NotificationUtils.updateNotification(mBuilder);
+            }
+        });
     }
 
     private void showNotificationGridLayout() {
-        final NotificationCompat.Builder builder = getNotificationBuilder();
+        mBuilder = NotificationUtils.getNotificationBuilder(this, mTotalButtonsANV.getValue());
 
         // get cell IDs
         int[] viewIds = new int[mGridLayout.getChildCount()];
@@ -205,95 +135,107 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         // add photos to grid
         RemoteViews bigContentView = new RemoteViews(getPackageName(), R.layout.grid_layout);
-        int totalPhotos = 3;
-        for (int i = 0; i < totalPhotos; i += 2) {
-            for (int j = 0; j < 2 && i + j < totalPhotos; j++) {
+        int totalPhotos = mGridLayout.getChildCount() - 1;      // arbitrary value
+        for (int photoIdx = 0; photoIdx < totalPhotos;) {
+            for (int j = 0; j < 2 && photoIdx < totalPhotos; photoIdx++, j++) {
                 RemoteViews photoView = new RemoteViews(getPackageName(), R.layout.grid_item);
-                photoView.setImageViewBitmap(R.id.iv_photo, mPhotoItem);
-                bigContentView.addView(viewIds[i + j], photoView);
+                setRemoteViewsImage(photoView);
+                bigContentView.addView(viewIds[photoIdx], photoView);
             }
         }
 
         // add grid to notification
-        builder.setContentTitle(getString(R.string.custom_notification_demo))
+        mBuilder.setContentTitle(getString(R.string.use_grid_layout))
                 .setStyle(new NotificationCompat.DecoratedCustomViewStyle())
                 .setCustomBigContentView(bigContentView);
 
-        if (mNotificationManager != null) {
-            mNotificationManager.notify(NOTIFICATION_ID, builder.build());
-        }
+        NotificationUtils.updateNotification(mBuilder);
     }
 
-    private RemoteViews getPhotosGridView(int photoPerRow, int totalPhotos) {
+    private void showNotificationRemoteViews() {
+        mBuilder = NotificationUtils.getNotificationBuilder(this, mTotalButtonsANV.getValue());
 
-        // recalculate grid's height if it has action buttons
-        int maxGridHeight = mMaxGridHeight;
-        if (mTotalButtonsANV.getNumberValue() > 0) {
-            maxGridHeight -= getSystemActionBarHeight();
-        }
+        int photosPerRow = mPhotosPerRowANV.getValue();
+        int totalPhotos = mTotalPhotosANV.getValue();
+        RemoteViews bigContentView = getPhotosGridView(photosPerRow, totalPhotos);
 
-        // add photos part
+        mBuilder.setContentTitle(getString(R.string.use_remote_views))
+                .setStyle(new NotificationCompat.DecoratedCustomViewStyle())
+                .setCustomBigContentView(bigContentView);
+
+        NotificationUtils.updateNotification(mBuilder);
+    }
+
+    private RemoteViews getPhotosGridView(int photosPerRow, final int totalPhotos) {
+
+        int maxGridHeight = computeMaxGridHeight();
         float gridSpace = getResources().getDimension(R.dimen.grid_item_space);
-        float curHeight = 0, rowHeight = (int) (mPhotoItem.getHeight() + gridSpace);
-        RemoteViews gridView = new RemoteViews(getPackageName(), R.layout.notification_layout_expanded);
-        Bitmap photoItem = mPhotoItem;
-        RemoteViews lastItem = null;
-        int morePhotos = totalPhotos;
-        for (int i = 0; i < totalPhotos; i += photoPerRow) {
-            RemoteViews rowView = new RemoteViews(getPackageName(), R.layout.horizontal_linear_layout);
+        float rowHeight = (int) (mPhotoSize + gridSpace);
 
-            // check if it has reached the last row
-            int residualSpace = (int) (maxGridHeight - curHeight);
-            if (residualSpace < rowHeight) {
-                // and in compact mode
-                if (mCompactModeSwitch.isChecked() && i > 0) {
-                    break;
-                } /* or not */ else {
-                    photoItem = Bitmap.createBitmap(mPhotoItem, 0, 0,
-                            mPhotoItem.getWidth(), residualSpace);
-                }
-            }
+        RemoteViews gridView = new RemoteViews(getPackageName(), R.layout.notification_layout_expanded);
+        // add photos part
+        RemoteViews lastItem = null;
+        int photoIdx = 0;
+        for (float curHeight = 0; photoIdx < totalPhotos;) {
+            RemoteViews rowView = new RemoteViews(getPackageName(), R.layout.horizontal_linear_layout);
 
             // add photos to grid
             RemoteViews photoView = null;
-            for (int j = 0; j < photoPerRow && i + j < totalPhotos; j++) {
-
+            for (int j = 0; j < photosPerRow && photoIdx < totalPhotos; photoIdx++, j++) {
                 photoView = new RemoteViews(getPackageName(),
-                        j < photoPerRow - 1 ? R.layout.grid_item : R.layout.grid_last_row_item);
-                photoView.setImageViewBitmap(R.id.iv_photo, photoItem);
-                setOnClickPendingIntent(photoView, i + j, String.valueOf(i + j));
+                        j < photosPerRow - 1 ? R.layout.grid_item : R.layout.grid_last_row_item);
+                setRemoteViewsImage(photoView);
+                setOnClickPendingIntent(photoView, photoIdx, String.valueOf(photoIdx));
 
                 rowView.addView(R.id.ll_row, photoView);
-                morePhotos--;
             }
             lastItem = photoView;
             gridView.addView(R.id.ll_root, rowView);
 
             // if it exceeds acceptable limit
             curHeight += rowHeight;
-            if (curHeight > maxGridHeight) {
+            if (curHeight + rowHeight > maxGridHeight) {
                 break;
             }
         }
 
         // update last item if it is in compact mode
-        if (mCompactModeSwitch.isChecked() && morePhotos > 0) {
-            photoItem = getCompactModeBitmap(photoItem, morePhotos);
+        final int morePhotos = totalPhotos - photoIdx;
+        if (morePhotos > 0) {
             if (lastItem != null) {
-                lastItem.setImageViewBitmap(R.id.iv_photo, photoItem);
-                setOnClickPendingIntent(lastItem, totalPhotos, "+" + morePhotos);
+                final RemoteViews finalLastItem = lastItem;
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Bitmap src = getDemoBitmap(false);
+                        if (src != null) {
+                            Bitmap photoItem = getCompactModeBitmap(src, morePhotos);
+                            setOnClickPendingIntent(finalLastItem, totalPhotos, "+" + morePhotos);
+                            setRemoteViewsImage(finalLastItem, photoItem);
+                        }
+                    }
+                });
             }
         }
 
         return gridView;
     }
 
-    private int getSystemActionBarHeight() {
-        TypedValue tv = new TypedValue();
-        if (getTheme().resolveAttribute(R.attr.actionBarSize, tv, true)) {
-            return TypedValue.complexToDimensionPixelSize(tv.data,getResources().getDisplayMetrics());
+    private int computeMaxGridHeight() {
+
+        int maxGridHeight;
+
+        // title
+        float titleMargins = Utils.dpToPx(this, 16) * 2;
+        float titleHeight = Utils.dpToPx(this, 16);
+        maxGridHeight = (int) (Utils.dpToPx(this, 256) - (titleMargins + titleHeight));
+
+        // recalculate grid's height if it has action buttons
+        if (mTotalButtonsANV.getValue() > 0) {
+            maxGridHeight -= Utils.getSystemActionBarHeight(this);
         }
-        return 0;
+
+        return maxGridHeight;
     }
 
     private void setOnClickPendingIntent(RemoteViews remoteViews, int requestCode, String extra) {
@@ -308,100 +250,119 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * get a bitmap with darkened background and overlaid text indicating the number of hidden photos
      * this method is only used in compact mode, and hence comes the method's name.
      *
-     * @param src the original bitmap
+     * Keep in mind that this method will be executed SYNCHRONOUSLY
+     *
      * @param morePhotos the number of hidden photos
      * @return the designated bitmap
      */
-    private Bitmap getCompactModeBitmap(Bitmap src, int morePhotos) {
-        src = Utils.darkenBitmap(src);
-        return Utils.addTextToBitmap(this, src, "+" + morePhotos);
+    private Bitmap getCompactModeBitmap(@NonNull Bitmap src, final int morePhotos) {
+        Bitmap bitmap = BitmapUtils.darkenBitmap(src);
+        return BitmapUtils.addTextToBitmap(MainActivity.this, bitmap, "+" + morePhotos);
+    }
+
+    private void setRemoteViewsImage(@NonNull RemoteViews remoteViews) {
+        setRemoteViewsImage(remoteViews, R.id.iv_photo);
+    }
+
+    private void setRemoteViewsImage(@NonNull RemoteViews remoteViews, @NonNull final Bitmap bitmap) {
+        setRemoteViewsImage(remoteViews, R.id.iv_photo, bitmap);
+    }
+
+    private void setRemoteViewsImage(@NonNull final RemoteViews remoteViews,
+                                     @IdRes final int viewId) {
+        remoteViews.setImageViewBitmap(viewId, mPlaceHolder);
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                final Bitmap bitmap = getDemoBitmap(false);
+                if (bitmap != null) {
+                    remoteViews.setImageViewBitmap(viewId, bitmap);
+                    // mute sound before notifying
+                    mBuilder.setDefaults(Notification.DEFAULT_LIGHTS);
+                    NotificationUtils.updateNotification(mBuilder);
+                }
+            }
+        });
+    }
+
+    private void setRemoteViewsImage(@NonNull final RemoteViews remoteViews,
+                                     @IdRes final int viewId, @NonNull Bitmap bitmap) {
+        remoteViews.setImageViewBitmap(viewId, bitmap);
+        NotificationUtils.updateNotification(mBuilder);
+    }
+
+    /**
+     * get demo bitmap corresponding to the the async option
+     *
+     * Keep in mind that this method will be executed SYNCHRONOUSLY
+     * and must be called in a background thread
+     *
+     *
+     * @param originalSize use bitmap's original size if true
+     * @return bitmap from resource if sync, bitmap from url if async
+     */
+    private Bitmap getDemoBitmap(boolean originalSize) {
+        if (originalSize) {
+            return mAsyncSwitch.isChecked() ?
+                    BitmapUtils.getThumbnail(MainActivity.this, BASE_URI_BUILDER.build()) :
+                    BitmapUtils.getThumbnail(MainActivity.this, R.drawable.grid_photo_item_land);
+        } else
+            return mAsyncSwitch.isChecked() ?
+                    BitmapUtils.getThumbnail(MainActivity.this,
+                            BASE_URI_BUILDER.build(), mPhotoSize, mPhotoSize) :
+                    BitmapUtils.getThumbnail(MainActivity.this,
+                            R.drawable.grid_photo_item_land, mPhotoSize, mPhotoSize);
+    }
+
+    private void getPlaceHolder() {
+        Bitmap bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.placeholder_300);
+        mPlaceHolder = ThumbnailUtils.extractThumbnail(bitmap, mPhotoSize, mPhotoSize);
     }
 
     @Override
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.btn_show_notifications:
+                NotificationUtils.removeAllNotifications();
                 showNotification();
                 break;
             case R.id.rb_big_picture_style:
                 mNotificationType = TYPE_BIG_PICTURE_STYLE;
-                setRemoteViewsOptionsEnabled(false);
+                setRemoteViewsOptionsVisibility(View.GONE);
                 break;
             case R.id.rb_remote_views:
                 mNotificationType = TYPE_REMOTE_VIEWS;
-                setRemoteViewsOptionsEnabled(true);
+                setRemoteViewsOptionsVisibility(View.VISIBLE);
                 break;
             case R.id.rb_grid_layout:
                 mNotificationType = TYPE_GRID_LAYOUT;
-                Log.d(TAG, "onClick: ");
-                setRemoteViewsOptionsEnabled(false);
+                setRemoteViewsOptionsVisibility(View.GONE);
                 break;
         }
     }
 
     private void showNotification() {
-        HandlerThread handlerThread = new HandlerThread(getPackageName());
-        handlerThread.start();
-        Handler handler = new Handler(handlerThread.getLooper());
-
         switch (mNotificationType) {
             case TYPE_BIG_PICTURE_STYLE:
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        retrievePhotoItemSync(1);
-                        showNotificationBigPictureStyle();
-                    }
-                });
+                computePhotoSize(1);
+                showNotificationBigPictureStyle();
                 break;
             case TYPE_REMOTE_VIEWS:
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        retrievePhotoItemSync(mPhotosPerRowANV.getNumberValue());
-                        showNotificationRemoteViews();
-                    }
-                });
+                computePhotoSize(mPhotosPerRowANV.getValue());
+                showNotificationRemoteViews();
                 break;
             case TYPE_GRID_LAYOUT:
-                handler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        mGridLayout = (GridLayout) View.inflate(
-                                MainActivity.this, R.layout.grid_layout, null);
-                        retrievePhotoItemSync(mGridLayout.getColumnCount());
-                        showNotificationGridLayout();
-                    }
-                });
+                mGridLayout = (GridLayout) View.inflate(
+                        MainActivity.this, R.layout.grid_layout, null);
+                computePhotoSize(mGridLayout.getColumnCount());
+                showNotificationGridLayout();
                 break;
             default:
                 throw new UnsupportedOperationException("Unknown notification type");
         }
     }
 
-    @SuppressLint({"WrongConstant", "PrivateApi"})
-    private void expandNotification() {
-        Object statusBarService = getSystemService( "statusbar" );
-        try {
-            Class<?> statusBarManager = Class.forName( "android.app.StatusBarManager" );
-            Method showStatusBarMethod = Build.VERSION.SDK_INT >= 17 ?
-                    statusBarManager.getMethod("expandNotificationsPanel") :
-                    statusBarManager.getMethod("expand");
-            showStatusBarMethod.invoke( statusBarService );
-        } catch (ClassNotFoundException e) {
-            e.printStackTrace();
-        } catch (NoSuchMethodException e) {
-            e.printStackTrace();
-        } catch (IllegalAccessException e) {
-            e.printStackTrace();
-        } catch (InvocationTargetException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void setRemoteViewsOptionsEnabled(boolean enabled) {
-        int visibility = enabled ? View.VISIBLE : View.GONE;
-        mCompactModeSwitch.setVisibility(visibility);
+    private void setRemoteViewsOptionsVisibility(int visibility) {
         mTotalPhotosANV.setVisibility(visibility);
         mPhotosPerRowANV.setVisibility(visibility);
     }

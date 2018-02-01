@@ -103,5 +103,5 @@ public class AdjustNumberView extends LinearLayout {
         mDescriptionTextView.setText(description);
     }
 
-    public int getNumberValue() { return mNumber; }
+    public int getValue() { return mNumber; }
 }

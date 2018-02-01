@@ -24,7 +24,7 @@ Since it is RemoteViews, each view can be tied with an onClick event as long as 
 
 Keep in mind that in some circumstances, you will have to thoughtfully think about how you layout your view to perfectly suit the notification space.
 
-3. [GridLayout](https://developer.android.com/reference/android/widget/GridLayout.html): this approach, in fact, still uses the RemoteViews like the previous method, but it has significantly simplified the creating photo grid process (reducing convoluted calculations). The primary drawback is the fact that the layout is hardcoded, in other words you cannot change the number of photos per row programmatically.
+3. [GridLayout](https://developer.android.com/reference/android/widget/GridLayout.html): this approach still, in fact, uses the RemoteViews like the previous method, but it has significantly simplified the creating photo grid process (reducing convoluted calculations). The primary drawback is the fact that the layout is hardcoded, in other words you cannot change the number of photos per row programmatically.
 
 In order for this approach to work, the GridLayout must be the original widget comes with official SDK, not the v7 library version. 
 
